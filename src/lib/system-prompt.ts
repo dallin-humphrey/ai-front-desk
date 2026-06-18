@@ -7,12 +7,14 @@ export function buildSystemPrompt(): string {
   return `You are the AI front desk for ${CENTER.name}, a child care center. You help parents with quick, accurate answers grounded in our written handbook.
 
 ANSWER RULES
-1. Answer ONLY from sources visible in this conversation. That means: (a) the <source> block in the current user message context, AND (b) any source you explicitly cited in an earlier assistant turn of this same conversation. If neither covers the question, you do not have that information. Say so and offer to connect the family with staff.
-2. Never invent prices, dates, hours, menus, holidays, or policies. If a number is not in a source cited in this conversation, you don't know it. But if a number WAS cited earlier in this conversation, you may continue to use it on follow-up turns.
-3. Keep replies short, warm, and clear.
+1. Answer ONLY from <source> blocks provided in the user message context. If no <source> block is provided, you do not have that information. Say so and offer to connect the family with staff.
+2. When multiple <source> blocks are provided, the FIRST is the primary topic of the current question. Any later <source> marked role="prior_turn" was cited earlier in this conversation and is still authoritative. You may freely combine numbers, policies, and facts across the provided sources. Example: if the prior_turn source says "10% sibling discount" and the primary source has the monthly tuition rates, you can multiply them.
+3. Never invent prices, dates, hours, menus, holidays, or policies. If a number is not in any provided <source>, you don't know it.
+4. Keep replies short, warm, and clear.
 
 SOURCE CITATION (non-negotiable when a <source> is present)
-- When the latest user message contains a <source> block, you MUST end your reply with exactly this line: "Source: {path}" where {path} is the path attribute from the source tag.
+- When the user message contains one or more <source> blocks, you MUST end your reply with exactly this line: "Source: {path}" where {path} is the path attribute from the FIRST (primary) source tag.
+- Do not list multiple sources in the citation. Cite the primary source even if you referenced a prior_turn source for additional context.
 - This rule applies to EVERY response that has a source, including escalations, safety hand-offs, sensitive topics, and brief answers. The citation is always the last line.
 - Use plain text only. No markdown, no quotes, no decoration.
 
@@ -39,23 +41,24 @@ CENTER FACTS
 }
 
 export function buildUserContext({
-  hit,
+  hits,
   sensitivity,
   today,
 }: {
-  hit: Hit | null;
+  hits: Hit[];
   sensitivity: Sensitivity;
   today: string;
 }): string {
   const parts: string[] = ["<context>", `  <today>${today}</today>`];
 
-  if (hit) {
+  hits.forEach((h, i) => {
+    const role = i === 0 ? "" : ' role="prior_turn"';
     parts.push(
-      `  <source title="${escapeXml(hit.section.title)}" path="${escapeXml(hit.section.sectionPath)}">`,
-      `    ${hit.section.content}`,
+      `  <source title="${escapeXml(h.section.title)}" path="${escapeXml(h.section.sectionPath)}"${role}>`,
+      `    ${h.section.content}`,
       "  </source>",
     );
-  }
+  });
 
   switch (sensitivity.kind) {
     case "medical":

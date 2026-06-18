@@ -10,7 +10,7 @@ import { anthropic } from "@ai-sdk/anthropic";
 import { eq } from "drizzle-orm";
 import { db } from "~/server/db";
 import { handbookSections, queryLog } from "~/server/db/schema";
-import { retrieve, type RetrievableSection } from "~/lib/retrieve";
+import { retrieve, type RetrievableSection, type Hit } from "~/lib/retrieve";
 import { classify, effectiveSensitivity } from "~/lib/guardrails";
 import { buildSystemPrompt, buildUserContext } from "~/lib/system-prompt";
 import { MODEL_ID } from "~/lib/constants";
@@ -69,25 +69,40 @@ export async function POST(req: Request) {
   }
 
   // 3. Retrieve (skip for complaints — don't surface a policy match for venting).
-  let hit = classifier.kind === "complaint" ? null : retrieve(userText, sections);
+  const freshHit =
+    classifier.kind === "complaint" ? null : retrieve(userText, sections);
 
-  // 3a. Conversational source carryover. If this turn missed but the parent is
-  //     following up on the same topic, fall back to the most recent matched
-  //     section so the model can cite "Source:" consistently across the chat.
-  if (!hit && classifier.kind !== "complaint" && messages.length > 1) {
-    const recentPath = extractRecentSourcePath(messages);
-    if (recentPath) {
-      const recent = sections.find((s) => s.sectionPath === recentPath);
-      if (recent) hit = { section: recent, score: 0 };
-    }
+  // 3a. Look up the most recently cited source from earlier turns. We inject
+  //     it as a secondary source so the model can reference numbers and
+  //     policies from prior topics, e.g. cross-multiplying a sibling discount
+  //     (turn 1) against tuition rates (turn 2).
+  const recentPath =
+    messages.length > 1 ? extractRecentSourcePath(messages) : null;
+  const priorSection =
+    recentPath && classifier.kind !== "complaint"
+      ? (sections.find((s) => s.sectionPath === recentPath) ?? null)
+      : null;
+
+  // 3b. Assemble sources. Primary (current turn) first; prior source second
+  //     if different. If there's no fresh hit but there is a prior source,
+  //     promote the prior to primary (the existing source-carryover behavior).
+  const hits: Hit[] = [];
+  if (freshHit) hits.push(freshHit);
+  if (
+    priorSection &&
+    (!freshHit || freshHit.section.id !== priorSection.id)
+  ) {
+    hits.push({ section: priorSection, score: 0 });
   }
+  // Primary hit drives sensitivity routing and the citation.
+  const hit = hits[0] ?? null;
 
   // 4. Combine classifier with matched section sensitivity.
   const sensitivity = effectiveSensitivity(classifier, hit?.section ?? null);
 
   // 5. Build static system + per-request user context.
   const system = buildSystemPrompt();
-  const context = buildUserContext({ hit, sensitivity, today });
+  const context = buildUserContext({ hits, sensitivity, today });
 
   // 6. Augment the last user message to prepend the XML context.
   const augmented: UIMessage[] = messages.map((m, i) => {
