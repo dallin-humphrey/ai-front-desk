@@ -1,36 +1,115 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AI Front Desk
 
-## Getting Started
+A prototype "AI Front Desk" for a fictional childcare center (Maple Grove
+Early Learning), built for the brightwheel take-home exercise.
 
-First, run the development server:
+Two surfaces:
+
+- **Parent** (`/`) — mobile-friendly chat. Answers are grounded in the
+  center's written handbook (stored in Postgres). Every answer is cited.
+  Sensitive questions (illness, custody, complaints) refuse to give advice
+  and route the parent to a person.
+- **Admin** (`/admin`) — staff view, no auth. Edit handbook sections, see
+  what parents are asking and where the system struggled, and turn an
+  unanswered question into a real handbook entry in one click. The
+  co-pilot drafts a first version of the answer in the center's voice.
+
+## Trust architecture
+
+- **Handbook is the only source of truth.** The model never recalls
+  policies from training. Answers come from `<source>` blocks injected
+  per request. If retrieval finds no match, the model is required to
+  refuse and route to staff.
+- **Deterministic guardrails before the LLM.** A regex classifier reads
+  intent from the parent's message (emergency, complaint, medical,
+  custody, individual-child) before retrieval runs. The "I love your
+  food!" → AI-replies-to-a-complaint failure mode is structurally
+  prevented.
+- **Citation contract.** When the model has a source, it must end with
+  `Source: <path>`. The UI surfaces the citation; missing citations are
+  visibly wrong.
+- **Audit log.** Every chat turn writes a `queryLog` row with question,
+  matched section, score, and answered / escalated / sensitive flags.
+  The admin analytics page is the audit trail.
+
+## Stack
+
+- Next.js 16 (App Router) + React 19 + TypeScript
+- Tailwind v4
+- AI SDK 6 (`ai`, `@ai-sdk/react`, `@ai-sdk/anthropic`)
+- Drizzle ORM + Neon Postgres (HTTP driver)
+- zod everywhere requests cross a boundary
+- `@t3-oss/env-nextjs` for env validation
+
+No tRPC, no react-query, no auth, no embeddings, no PDF ingestion. The
+chat route is the only streaming endpoint; everything else is plain REST.
+
+## Local setup
 
 ```bash
+# 1. Install
+npm install
+
+# 2. Create .env.local at the repo root with two keys:
+#    DATABASE_URL="postgresql://..."          # Neon pooled URL
+#    ANTHROPIC_API_KEY="sk-ant-..."           # Anthropic key with spend cap
+
+# 3. Push schema to Neon and seed the Maple Grove handbook
+npm run db:generate
+npm run db:push
+npm run db:seed
+
+# 4. Run
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open <http://localhost:3000> for the parent UI and <http://localhost:3000/admin>
+for staff. There is no auth on the admin page; it is a prototype.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Vercel deployment
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. Import the GitHub repo into Vercel.
+2. Project Settings → Environment Variables — add `DATABASE_URL` and
+   `ANTHROPIC_API_KEY` to **Production, Preview, and Development**.
+3. Default Node runtime (do not select Edge). No build-time DB calls.
+4. Deploy.
 
-## Learn More
+## Repo layout
 
-To learn more about Next.js, take a look at the following resources:
+```
+src/
+  app/
+    page.tsx                    parent chat
+    admin/page.tsx              admin console
+    api/
+      chat/route.ts             streaming chat pipeline
+      sections/...              handbook CRUD
+      sections/draft/route.ts   co-pilot draft (operator-side)
+      analytics/route.ts        recent questions + counts
+  lib/
+    retrieve.ts                 lexical scorer (pure)
+    guardrails.ts               regex intent classifier (pure)
+    system-prompt.ts            prompt + per-request user context
+    voice.ts                    single source of voice rules
+    validators.ts               shared zod schemas
+    api.ts                      typed client fetch wrapper
+    constants.ts                MODEL_ID, thresholds
+    center-config.ts            static center facts
+  server/db/
+    index.ts                    Drizzle + neon-http client
+    schema.ts                   2 tables: handbook_sections, query_log
+    seed.ts                     13-section Maple Grove handbook
+  env.js                        zod-validated env
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+docs/
+  implementation-plan.md        full design + build spec
+  conventions.md                always-on coding rules
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## What is intentionally out of scope
 
-## Deploy on Vercel
+Auth, voice / TTS, a second-model review pass, vector retrieval, PDF
+ingestion, real email/SMS escalation, multi-center support, rate limiting.
+Each is a defensible next step but does not appear in the prototype.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+See `docs/implementation-plan.md` for the full design and decisions.

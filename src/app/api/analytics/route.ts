@@ -1,0 +1,74 @@
+import { db } from "~/server/db";
+import { handbookSections, queryLog } from "~/server/db/schema";
+import { desc, eq } from "drizzle-orm";
+import { RECENT_QUESTIONS_LIMIT } from "~/lib/constants";
+
+type Filter = "all" | "unanswered" | "escalated" | "sensitive";
+
+export async function GET(req: Request) {
+  const url = new URL(req.url);
+  const filter = (url.searchParams.get("filter") ?? "all") as Filter;
+
+  // Pull recent rows joined with section title.
+  const rows = await db
+    .select({
+      id: queryLog.id,
+      question: queryLog.question,
+      matchedSectionId: queryLog.matchedSectionId,
+      retrievalScore: queryLog.retrievalScore,
+      answered: queryLog.answered,
+      escalated: queryLog.escalated,
+      sensitive: queryLog.sensitive,
+      answerText: queryLog.answerText,
+      createdAt: queryLog.createdAt,
+      matchedSectionTitle: handbookSections.sectionPath,
+    })
+    .from(queryLog)
+    .leftJoin(
+      handbookSections,
+      eq(queryLog.matchedSectionId, handbookSections.id),
+    )
+    .orderBy(desc(queryLog.createdAt))
+    .limit(1000);
+
+  // Compute "asked N times" for unanswered questions by normalized text.
+  const normalize = (s: string) =>
+    s.toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+  const askedCount = new Map<string, number>();
+  for (const r of rows) {
+    if (!r.answered) {
+      const key = normalize(r.question);
+      askedCount.set(key, (askedCount.get(key) ?? 0) + 1);
+    }
+  }
+
+  const enriched = rows.map((r) => ({
+    ...r,
+    createdAt: r.createdAt.toISOString(),
+    askedCount: !r.answered ? askedCount.get(normalize(r.question)) : undefined,
+  }));
+
+  const counts = {
+    total: enriched.length,
+    answered: enriched.filter((r) => r.answered).length,
+    escalated: enriched.filter((r) => r.escalated).length,
+    unanswered: enriched.filter((r) => !r.answered).length,
+    sensitive: enriched.filter((r) => r.sensitive).length,
+  };
+
+  let filtered = enriched;
+  if (filter === "unanswered") {
+    filtered = filtered.filter((r) => !r.answered);
+    // Sort unanswered by askedCount desc, then recency
+    filtered.sort((a, b) => (b.askedCount ?? 0) - (a.askedCount ?? 0));
+  } else if (filter === "escalated") {
+    filtered = filtered.filter((r) => r.escalated);
+  } else if (filter === "sensitive") {
+    filtered = filtered.filter((r) => r.sensitive);
+  }
+
+  return Response.json({
+    rows: filtered.slice(0, RECENT_QUESTIONS_LIMIT),
+    counts,
+  });
+}
