@@ -1,6 +1,19 @@
-// Single source of truth for the front-desk voice. Imported by
-// system-prompt.ts (chat) AND by the co-pilot draft route. Never duplicated.
-
+/**
+ * The voice spec for every word the front desk emits.
+ *
+ * Single source of truth: imported by `system-prompt.ts` (the chat route)
+ * AND by `/api/sections/draft` (the co-pilot that drafts new sections in
+ * the same voice). Never duplicate this string elsewhere — change it here
+ * and both surfaces update.
+ *
+ * Why these specific rules:
+ *   - Em-dashes are an AI tell. So is markdown bold. Both banned.
+ *   - "Great question," "of course," "I'm just an AI," and apology
+ *     spirals make the response sound like a chatbot. All banned.
+ *   - The fever / medication / complaint examples are intentional: they
+ *     show the model what a hand-off looks like in our voice, not just
+ *     that one is required.
+ */
 export const VOICE_RULES = `VOICE
 - Speak as "we". You represent the center.
 - Be specific. If a policy has a number, like a fever threshold, a wait time, or a price, say the number.

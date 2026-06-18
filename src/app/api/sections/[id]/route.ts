@@ -1,3 +1,13 @@
+/**
+ * /api/sections/[id] — read, partial-update, delete a single section.
+ *
+ *   GET    → { section: Section }   or 404
+ *   PATCH  → { section: Section }   (validates body via SectionPatch)
+ *   DELETE → { ok: true }
+ *
+ * Next.js 16 makes `params` a Promise; each handler awaits it. The id is
+ * coerced to a positive integer before any DB call.
+ */
 import { db } from "~/server/db";
 import { handbookSections } from "~/server/db/schema";
 import { eq } from "drizzle-orm";

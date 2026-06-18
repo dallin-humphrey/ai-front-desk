@@ -1,3 +1,11 @@
+/**
+ * /api/sections — list + create handbook sections.
+ *
+ *   GET  → { sections: Section[] } (only active sections, sorted by path)
+ *   POST → { section: Section }    (validates body via SectionInput)
+ *
+ * Used by the admin Handbook tab and (via `~/lib/api.ts`) any client UI.
+ */
 import { db } from "~/server/db";
 import { handbookSections } from "~/server/db/schema";
 import { asc, eq } from "drizzle-orm";

@@ -8,11 +8,20 @@ Two surfaces:
 - **Parent** (`/`) — mobile-friendly chat. Answers are grounded in the
   center's written handbook (stored in Postgres). Every answer is cited.
   Sensitive questions (illness, custody, complaints) refuse to give advice
-  and route the parent to a person.
-- **Admin** (`/admin`) — staff view, no auth. Edit handbook sections, see
-  what parents are asking and where the system struggled, and turn an
-  unanswered question into a real handbook entry in one click. The
-  co-pilot drafts a first version of the answer in the center's voice.
+  and route the parent to a person. The chat retains context across turns
+  and can combine information across multiple handbook sections — e.g.
+  applying the sibling-discount percentage from one section against the
+  tuition rates in another.
+- **Admin** (`/admin`) — staff view, no auth. Three tabs:
+  - **Handbook** — chapter-grouped tree of all sections; edit any field
+    inline. An **AI keyword analyzer** suggests keyword chips from the
+    section content.
+  - **Recent Questions** — last 50 turns with answered/escalated/sensitive
+    badges. Unanswered questions are deduped and sorted by how many times
+    they've been asked. One-click **Add to handbook →** opens a section
+    editor where the **co-pilot** drafts the answer in the center's voice.
+  - **Suggested Prompts** — the chips parents see in the chat empty
+    state. CRUD, reorder, hide/show. Live-loaded by the parent UI.
 
 ## Trust architecture
 
@@ -30,7 +39,12 @@ Two surfaces:
   visibly wrong.
 - **Audit log.** Every chat turn writes a `queryLog` row with question,
   matched section, score, and answered / escalated / sensitive flags.
-  The admin analytics page is the audit trail.
+  The admin Recent Questions tab is the audit trail.
+- **Rate limiting.** Each LLM-burning route (chat, co-pilot draft, keyword
+  analyzer) is wrapped in a per-IP sliding-window limiter (`lib/rate-limit.ts`)
+  so a single client can't burn through the Anthropic spend cap. In-memory
+  per Vercel instance; production would move this to Upstash Redis or
+  Vercel KV.
 
 ## Stack
 
@@ -79,37 +93,47 @@ for staff. There is no auth on the admin page; it is a prototype.
 ```
 src/
   app/
-    page.tsx                    parent chat
-    admin/page.tsx              admin console
+    page.tsx                              parent chat
+    admin/page.tsx                        admin console (3 tabs)
     api/
-      chat/route.ts             streaming chat pipeline
-      sections/...              handbook CRUD
-      sections/draft/route.ts   co-pilot draft (operator-side)
-      analytics/route.ts        recent questions + counts
+      chat/route.ts                       streaming chat pipeline
+      sections/route.ts                   GET list, POST create
+      sections/[id]/route.ts              GET, PATCH, DELETE
+      sections/draft/route.ts             co-pilot draft (operator)
+      sections/analyze-keywords/route.ts  AI keyword suggester (operator)
+      analytics/route.ts                  recent questions + counts
+      prompts/route.ts                    suggested-prompt CRUD
+      prompts/[id]/route.ts               PATCH, DELETE
   lib/
-    retrieve.ts                 lexical scorer (pure)
+    retrieve.ts                 lexical scorer + stemming (pure)
     guardrails.ts               regex intent classifier (pure)
     system-prompt.ts            prompt + per-request user context
     voice.ts                    single source of voice rules
     validators.ts               shared zod schemas
     api.ts                      typed client fetch wrapper
-    constants.ts                MODEL_ID, thresholds
+    rate-limit.ts               in-memory per-IP sliding window
+    constants.ts                MODEL_ID, thresholds, rate limits
     center-config.ts            static center facts
   server/db/
     index.ts                    Drizzle + neon-http client
-    schema.ts                   2 tables: handbook_sections, query_log
-    seed.ts                     13-section Maple Grove handbook
-  env.js                        zod-validated env
+    schema.ts                   3 tables: sections, query_log, prompts
+    seed.ts                     13-section handbook + 5 prompts
+
+scripts/
+  cleanup-test-questions.ts     one-off query_log cleanup
 
 docs/
-  implementation-plan.md        full design + build spec
+  implementation-plan.md        design history (pre-build)
   conventions.md                always-on coding rules
+  writeup.md                    < 1 page submission writeup
 ```
 
 ## What is intentionally out of scope
 
 Auth, voice / TTS, a second-model review pass, vector retrieval, PDF
-ingestion, real email/SMS escalation, multi-center support, rate limiting.
-Each is a defensible next step but does not appear in the prototype.
+ingestion, real email/SMS escalation, multi-center support, cross-instance
+rate limiting (Upstash). Each is a defensible next step but does not appear
+in the prototype.
 
-See `docs/implementation-plan.md` for the full design and decisions.
+See `docs/writeup.md` for the narrative case, `docs/implementation-plan.md`
+for the design-phase plan, and `docs/conventions.md` for the coding rules.

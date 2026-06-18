@@ -1,3 +1,24 @@
+/**
+ * POST /api/chat — the streaming chat pipeline.
+ *
+ * Pipeline (in order):
+ *   1. Rate limit by client IP (drops noisy bots before any DB / LLM cost).
+ *   2. Pull active handbook sections from the DB.
+ *   3. Classify the parent's intent via `guardrails.classify` (regex).
+ *      Emergencies short-circuit — we stream a canned response without
+ *      calling the LLM at all.
+ *   4. Retrieve the best-matching handbook section (skipped on complaints).
+ *   5. Look up the most recent prior-turn source from the message history
+ *      and add it to a `hits[]` array if it's a different section. Lets
+ *      the model carry numbers across topic shifts (sibling discount in
+ *      turn 1 + tuition rates in turn 2 = a computed total in turn 2).
+ *   6. Compute effective sensitivity by combining classifier intent with
+ *      the matched section's own sensitivity tier.
+ *   7. Build the static system prompt + per-request `<context>` block.
+ *   8. Stream via `streamText`. On finish, write a `queryLog` row.
+ *
+ * Returns a UI message stream consumable by `useChat`.
+ */
 import {
   streamText,
   stepCountIs,

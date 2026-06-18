@@ -1,3 +1,16 @@
+/**
+ * Maple Grove seed. Idempotent: wipes `handbook_sections` and
+ * `suggested_prompts` and re-inserts the canonical demo content.
+ *
+ *   - 13 handbook sections covering hours, tuition, illness, custody,
+ *     etc. Loosely follows the structure of a real childcare family
+ *     handbook (the Albuquerque DCFD handbook the assignment links to)
+ *     but invented for our fictional center.
+ *   - 5 suggested chips for the parent UI empty state.
+ *
+ * Runs outside the Next.js runtime via `tsx`, so it needs to load
+ * `.env.local` manually. Does NOT touch `query_log`.
+ */
 import { config } from "dotenv";
 config({ path: ".env.local" });
 

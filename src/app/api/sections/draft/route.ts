@@ -1,3 +1,18 @@
+/**
+ * POST /api/sections/draft — the operator co-pilot.
+ *
+ * Body: `{ question: string }` (a logged unanswered question)
+ * Returns: `{ draft: string }`
+ *
+ * Fires one `generateText` call against Claude with the parent's question
+ * and our `VOICE_RULES`. The model writes a 60-to-140-word paragraph in
+ * the same voice the rest of the handbook uses, with `[bracketed]`
+ * placeholders for any specifics it can't infer. The operator edits,
+ * approves, and saves through the normal section CRUD; the AI never
+ * auto-saves.
+ *
+ * Rate-limited per IP via `RATE_LIMITS.llmAux`.
+ */
 import { generateText } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
 import { MODEL_ID, RATE_LIMITS } from "~/lib/constants";

@@ -1,3 +1,15 @@
+/**
+ * GET /api/analytics — backs the admin Recent Questions tab.
+ *
+ * Query: `?filter=all|unanswered|escalated|sensitive`
+ * Returns: `{ rows: QueryLogRow[], counts: AnalyticsCounts }`
+ *
+ * The `askedCount` field on each row is the count of unanswered turns
+ * whose normalized question text matches. Under the "unanswered" filter
+ * the rows are deduped by normalized question (one row per unique
+ * question) and sorted by `askedCount` desc, then recency — so the
+ * operator sees the most-asked gaps at the top of the list.
+ */
 import { db } from "~/server/db";
 import { handbookSections, queryLog } from "~/server/db/schema";
 import { desc, eq } from "drizzle-orm";

@@ -1,3 +1,12 @@
+/**
+ * /api/prompts — list + create the chips parents see in the empty state.
+ *
+ *   GET  → { prompts: Prompt[] } (only active, sorted by `sortOrder`)
+ *   POST → { prompt: Prompt }    (validates body via PromptInput)
+ *
+ * Live-loaded by the parent UI on mount; admin Suggested Prompts tab
+ * provides the operator-side CRUD.
+ */
 import { db } from "~/server/db";
 import { suggestedPrompts } from "~/server/db/schema";
 import { asc, eq } from "drizzle-orm";

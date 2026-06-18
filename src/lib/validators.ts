@@ -1,5 +1,16 @@
+/**
+ * Shared zod schemas. Imported by route handlers (which call `.safeParse`
+ * on incoming bodies) AND by `~/lib/api.ts` (which uses the inferred
+ * types for typed fetch wrappers). One source for both directions of
+ * every API contract in the app.
+ */
 import { z } from "zod";
 
+/**
+ * Sensitivity tier stored on each handbook section. Drives the chat
+ * route's safety routing alongside the regex intent classifier in
+ * `guardrails.ts`.
+ */
 export const Sensitivity = z.enum(["safe", "policy_escalate", "handoff"]);
 export type Sensitivity = z.infer<typeof Sensitivity>;
 

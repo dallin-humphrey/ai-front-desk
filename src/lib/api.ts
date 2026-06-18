@@ -1,3 +1,12 @@
+/**
+ * Typed fetch wrapper used by the admin UI to talk to our REST routes.
+ * Every method returns the JSON shape declared in `./validators.ts` so the
+ * client and server agree on the contract.
+ *
+ * Components never call `fetch` directly. They go through `api.*` so the
+ * wrapper is the single place to add cross-cutting concerns later
+ * (retries, telemetry, auth headers).
+ */
 import type {
   Section,
   SectionInput,

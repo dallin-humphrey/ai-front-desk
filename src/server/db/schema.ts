@@ -1,3 +1,21 @@
+/**
+ * Drizzle schema. Three tables:
+ *
+ *   handbook_sections — the knowledge base. Each row is one section of
+ *     the operator-owned handbook. Sensitivity tier (`safe` /
+ *     `policy_escalate` / `handoff`) drives the chat route's safety
+ *     routing. Keywords power lexical retrieval in `~/lib/retrieve.ts`.
+ *
+ *   query_log — append-only audit log. The chat route writes one row per
+ *     turn. The admin Recent Questions tab is the read side.
+ *
+ *   suggested_prompts — the chip list parents see in the empty state.
+ *     Operator-editable so phrasing can be tuned without a code change.
+ *
+ * Inferred row types (HandbookSection, QueryLogRow, SuggestedPrompt) and
+ * insert types are exported from this module — never hand-write row
+ * types elsewhere.
+ */
 import {
   pgTable,
   serial,

@@ -20,8 +20,11 @@ plan wins (it's the more specific spec).
   `.$type<string[]>()` for array columns.
 - **`@t3-oss/env-nextjs` + zod** for env validation. `import { env } from "~/env"`.
 - **Tailwind v4** for styling.
-- **Do not add**: tRPC, react-query, Clerk, Upstash, Stripe, Resend, vector DB,
+- **Do not add**: tRPC, react-query, Clerk, Stripe, Resend, vector DB,
   embeddings, a second LLM, voice. They are explicitly out of scope.
+- **Rate limiting** is in-memory (`~/lib/rate-limit.ts`) per Vercel instance.
+  This is sufficient for one-IP abuse; Upstash Redis would be the production
+  upgrade for cross-instance correctness, intentionally deferred.
 
 ---
 
@@ -62,10 +65,17 @@ These exist so the model cannot invent things the center doesn't actually offer.
    policies or numbers from training. There are no separate `tuition` /
    `closures` / `menu` tables and no tool calls for structured data.
 2. **Threshold-gated retrieval.** `lib/retrieve.ts` returns `null` when no
-   section scores above the threshold. When `null`, the chat route does
-   **not** inject any `<source>` block, and the system prompt instructs
-   the model to refuse the question and offer to connect with staff.
-3. **Citation contract.** When a `<source title="X">…</source>` block is
+   section scores above the threshold. When `null` (and no prior-turn source
+   exists), the chat route does **not** inject any `<source>` block, and the
+   system prompt instructs the model to refuse the question and offer to
+   connect with staff.
+3. **Multi-source injection.** The chat route assembles a `hits[]` array of
+   sources: the current turn's match is primary; any DIFFERENT section cited
+   in an earlier assistant turn is added as a secondary source marked
+   `role="prior_turn"`. This lets the model carry numbers across topic shifts
+   (e.g. "what's the discount?" then "how much for two kids?"). Citation is
+   always the primary source.
+4. **Citation contract.** When a `<source title="X">…</source>` block is
    present, the model must end its answer with `Source: X`. The UI surfaces
    this; missing citations are visibly wrong.
 4. **Deterministic sensitivity router.** `lib/guardrails.ts` classifies the
@@ -110,11 +120,20 @@ These exist so the model cannot invent things the center doesn't actually offer.
    a one-line headline, the center phone number, and a short reinforcing
    line. This card is the visible empathy gesture — don't bury it in a
    subtitle.
-5. **Admin UI** (`/admin`) has no auth. Two tabs: Handbook and Recent
-   Questions.
+5. **Admin UI** (`/admin`) has no auth. Three tabs: Handbook, Recent
+   Questions, and Suggested Prompts (parent-facing chip list, operator-
+   editable).
 6. **The improvement loop button** ("Add to handbook →" on unanswered
    queryLog rows) is the demo's hero feature. Auto-extract keywords from
    the question on the prefill. Make it obvious and one-click.
+7. **Operator co-pilot.** When the editor opens from an unanswered
+   question, the chat route fires a one-shot `generateText` call against
+   the question to pre-draft the section content in the center's voice.
+   The operator edits/approves; the AI never auto-saves.
+8. **Keyword analyzer.** The Keywords field has a `+ Suggest keywords with
+   AI` button that calls `generateObject` with a typed zod schema and
+   merges the returned keyword phrases (deduped against existing) into the
+   chip list.
 
 ---
 

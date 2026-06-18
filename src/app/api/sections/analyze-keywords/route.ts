@@ -1,3 +1,18 @@
+/**
+ * POST /api/sections/analyze-keywords — the AI keyword suggester used by
+ * the admin section editor's "+ Suggest keywords with AI" button.
+ *
+ * Body: `{ title, content, existingKeywords[] }`
+ * Returns: `{ keywords: string[] }` — new suggestions, deduped server-
+ * side against `existingKeywords` (case-insensitive).
+ *
+ * Uses `generateObject` with a zod schema so the model is constrained to
+ * an array of 8–25 short keyword phrases. The system prompt nudges it to
+ * always include base singular forms ("nap" alongside "nap time") because
+ * single-word parent queries can otherwise miss multi-word keywords.
+ *
+ * Rate-limited per IP via `RATE_LIMITS.llmAux`.
+ */
 import { generateObject } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
 import { z } from "zod";

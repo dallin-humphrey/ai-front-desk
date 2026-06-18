@@ -1,8 +1,28 @@
+/**
+ * Builds the two strings the chat route sends to Claude on every turn:
+ *
+ *   1. The `system` prompt — fully STATIC across requests so Anthropic's
+ *      ephemeral cache can hit it. Contains the answer rules, escalation
+ *      rules, voice spec, and center facts. Never includes per-turn data.
+ *
+ *   2. The per-request `<context>` block — prepended to the latest user
+ *      message. Contains today's date, the matched source(s), and any
+ *      safety / complaint directive. Goes in the user message (not the
+ *      system) so the system stays cacheable.
+ *
+ * The split is the whole reason Anthropic prompt caching pays off on this
+ * route. If the source went in `system`, every distinct question would
+ * miss the cache.
+ */
 import { CENTER } from "./center-config";
 import { VOICE_RULES } from "./voice";
 import type { Hit } from "./retrieve";
 import type { Sensitivity } from "./guardrails";
 
+/**
+ * The static system prompt. Same string for every request (assuming the
+ * voice rules and center config don't change), so Anthropic caches it.
+ */
 export function buildSystemPrompt(): string {
   return `You are the AI front desk for ${CENTER.name}, a child care center. You help parents with quick, accurate answers grounded in our written handbook.
 
@@ -40,6 +60,19 @@ CENTER FACTS
 - We are closed on weekends.`;
 }
 
+/**
+ * Build the per-request `<context>` XML block that the chat route prepends
+ * to the latest user message text.
+ *
+ *   - `hits[0]` is the primary source (matched this turn). The model is
+ *     told to cite it via `Source: {path}` at the end of the reply.
+ *   - `hits[1+]` are marked `role="prior_turn"` and contain sources cited
+ *     in earlier turns. The model may freely combine numbers across them
+ *     and the primary, e.g. computing a sibling discount in turn 2 from
+ *     the percentage given in turn 1 against the rates in turn 2's source.
+ *   - Sensitivity directives (`<safety>` or `<complaint>`) are appended
+ *     when the classifier returned non-safe.
+ */
 export function buildUserContext({
   hits,
   sensitivity,

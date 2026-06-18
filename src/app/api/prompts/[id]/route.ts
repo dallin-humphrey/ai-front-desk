@@ -1,3 +1,12 @@
+/**
+ * /api/prompts/[id] — partial-update and delete a suggested prompt.
+ *
+ *   PATCH  → { prompt: Prompt }  (validates body via PromptPatch)
+ *   DELETE → { ok: true }
+ *
+ * Used by the admin Suggested Prompts tab for inline edits, reorders
+ * (via `sortOrder`), and hide / show toggles (via `isActive`).
+ */
 import { db } from "~/server/db";
 import { suggestedPrompts } from "~/server/db/schema";
 import { eq } from "drizzle-orm";
