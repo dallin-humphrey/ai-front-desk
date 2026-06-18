@@ -1,8 +1,9 @@
 import { generateObject } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
 import { z } from "zod";
-import { MODEL_ID } from "~/lib/constants";
+import { MODEL_ID, RATE_LIMITS } from "~/lib/constants";
 import { AnalyzeKeywordsBody } from "~/lib/validators";
+import { checkRateLimit, clientKey, rateLimited } from "~/lib/rate-limit";
 
 const KeywordSuggestions = z.object({
   keywords: z
@@ -15,6 +16,9 @@ const KeywordSuggestions = z.object({
 });
 
 export async function POST(req: Request) {
+  const rl = checkRateLimit(clientKey(req), RATE_LIMITS.llmAux);
+  if (!rl.allowed) return rateLimited(rl);
+
   const parsed = AnalyzeKeywordsBody.safeParse(await req.json());
   if (!parsed.success) {
     return Response.json({ error: parsed.error.format() }, { status: 400 });

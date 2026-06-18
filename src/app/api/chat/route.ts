@@ -13,12 +13,16 @@ import { handbookSections, queryLog } from "~/server/db/schema";
 import { retrieve, type RetrievableSection, type Hit } from "~/lib/retrieve";
 import { classify, effectiveSensitivity } from "~/lib/guardrails";
 import { buildSystemPrompt, buildUserContext } from "~/lib/system-prompt";
-import { MODEL_ID } from "~/lib/constants";
+import { MODEL_ID, RATE_LIMITS } from "~/lib/constants";
 import { CENTER } from "~/lib/center-config";
+import { checkRateLimit, clientKey, rateLimited } from "~/lib/rate-limit";
 
 export const maxDuration = 30;
 
 export async function POST(req: Request) {
+  const rl = checkRateLimit(clientKey(req), RATE_LIMITS.chat);
+  if (!rl.allowed) return rateLimited(rl);
+
   const { messages }: { messages: UIMessage[] } = await req.json();
   const lastUser = messages.filter((m) => m.role === "user").at(-1);
   const userText =

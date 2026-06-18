@@ -1,11 +1,15 @@
 import { generateText } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
-import { MODEL_ID } from "~/lib/constants";
+import { MODEL_ID, RATE_LIMITS } from "~/lib/constants";
 import { CENTER } from "~/lib/center-config";
 import { VOICE_RULES } from "~/lib/voice";
 import { DraftBody } from "~/lib/validators";
+import { checkRateLimit, clientKey, rateLimited } from "~/lib/rate-limit";
 
 export async function POST(req: Request) {
+  const rl = checkRateLimit(clientKey(req), RATE_LIMITS.llmAux);
+  if (!rl.allowed) return rateLimited(rl);
+
   const parsed = DraftBody.safeParse(await req.json());
   if (!parsed.success) {
     return Response.json({ error: parsed.error.format() }, { status: 400 });
