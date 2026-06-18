@@ -58,9 +58,24 @@ export async function GET(req: Request) {
 
   let filtered = enriched;
   if (filter === "unanswered") {
-    filtered = filtered.filter((r) => !r.answered);
-    // Sort unanswered by askedCount desc, then recency
-    filtered.sort((a, b) => (b.askedCount ?? 0) - (a.askedCount ?? 0));
+    // Dedupe by normalized question text. Show the most recent occurrence
+    // per unique question, sorted by asked-count desc (the "what to fix
+    // first" prioritization), then recency. One row per question keeps the
+    // improvement-loop button list scannable.
+    const seen = new Set<string>();
+    const deduped = [];
+    for (const r of filtered.filter((r) => !r.answered)) {
+      const key = normalize(r.question);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      deduped.push(r);
+    }
+    deduped.sort(
+      (a, b) =>
+        (b.askedCount ?? 0) - (a.askedCount ?? 0) ||
+        Date.parse(b.createdAt) - Date.parse(a.createdAt),
+    );
+    filtered = deduped;
   } else if (filter === "escalated") {
     filtered = filtered.filter((r) => r.escalated);
   } else if (filter === "sensitive") {
